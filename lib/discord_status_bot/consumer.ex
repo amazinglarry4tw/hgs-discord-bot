@@ -106,6 +106,9 @@ defmodule HGSDiscordBot.Consumer do
       %{"name" => name, "status" => status} -> format_message(name, status)
       other -> "• unexpected: #{inspect(other)}"
     end)
+    |> Enum.sort_by(fn string ->
+      string |> String.slice(7..-1//1)
+    end)
     |> Enum.join("\n")
   end
 
