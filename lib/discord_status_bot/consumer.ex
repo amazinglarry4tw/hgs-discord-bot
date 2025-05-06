@@ -2,17 +2,11 @@ defmodule HGSDiscordBot.Consumer do
   use Nostrum.Consumer
   alias Nostrum.Api
   alias Nostrum.Struct.Interaction
+  alias Utilities.Utilities
 
   @endpoint Application.compile_env!(:hgs_discord_bot, :endpoint_url)
   @restart_endpoint_url Application.compile_env!(:hgs_discord_bot, :restart_endpoint_url)
   @allowed_channels Application.compile_env!(:hgs_discord_bot, :allowed_channels)
-
-  @friendly_names %{
-    "VRisingServer" => "V Rising",
-    "MoriaServer-Win64-Shipping" => "Return to Moria",
-    "CoreKeeperServer" => "Core Keeper",
-    "enshrouded_server" => "Enshrouded"
-  }
 
   @impl true
   def handle_event(
@@ -101,6 +95,9 @@ defmodule HGSDiscordBot.Consumer do
   defp parse_response({:error, %HTTPoison.Error{reason: r}}), do: %{"error" => inspect(r)}
 
   defp format_servers(%{"servers" => servers}) when is_list(servers) do
+    # Ensure latest changes are loaded without restart.
+    Utilities.load()
+
     servers
     |> Enum.map(fn
       %{"name" => name, "status" => status} -> format_message(name, status)
@@ -116,10 +113,10 @@ defmodule HGSDiscordBot.Consumer do
   defp format_servers(_), do: "⚠️ no servers key found"
 
   defp format_message(name, "Up") do
-    "- ✅ - **#{@friendly_names["#{name}"]}**"
+    "- ✅ - **#{Utilities.get(name)}**"
   end
 
   defp format_message(name, "Down") do
-    "- ❌ - **#{@friendly_names["#{name}"]}** "
+    "- ❌ - **#{Utilities.get(name)}**"
   end
 end

@@ -2,6 +2,7 @@ defmodule HGSDiscordBot.Application do
   @moduledoc false
   use Application
   alias Nostrum.Api
+  alias Utilities.Utilities
 
   # the command(s) you want to register
   @commands [
@@ -39,6 +40,8 @@ defmodule HGSDiscordBot.Application do
       # this will call the child_spec injected by `use Nostrum.Consumer`
       {HGSDiscordBot.Consumer, []}
     ]
+
+    Utilities.load()
 
     # 3) start the supervisor
     Supervisor.start_link(children,
