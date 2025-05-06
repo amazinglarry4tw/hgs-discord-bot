@@ -2,11 +2,14 @@ defmodule HGSDiscordBot.Consumer do
   use Nostrum.Consumer
   alias Nostrum.Api
   alias Nostrum.Struct.Interaction
+  alias Nostrum.Struct.Guild.Member
+  alias Nostrum.Struct.Interaction
   alias Utilities.Utilities
 
   @endpoint Application.compile_env!(:hgs_discord_bot, :endpoint_url)
   @restart_endpoint_url Application.compile_env!(:hgs_discord_bot, :restart_endpoint_url)
   @allowed_channels Application.compile_env!(:hgs_discord_bot, :allowed_channels)
+  @allowed_role_ids Application.compile_env(:hgs_discord_bot, :allowed_roles)
 
   @impl true
   def handle_event(
@@ -49,10 +52,12 @@ defmodule HGSDiscordBot.Consumer do
            data: %{name: "restart", options: [%{name: "game_id", value: game_id}]},
            channel_id: chan,
            id: id,
+           guild_id: guild_id,
+           user: user,
            token: token
          }, _ws}
       ) do
-    if chan in @allowed_channels do
+    if chan in @allowed_channels and has_role?(guild_id, user.id, @allowed_role_ids) do
       # body = %{game: game_id} |> Jason.encode!()
       # headers = [{"Content-Type", "application/json"}]
       endpoint = "#{@restart_endpoint_url}#{game_id}"
@@ -79,12 +84,35 @@ defmodule HGSDiscordBot.Consumer do
         type: 4,
         data: %{content: result}
       })
+    else
+      Api.Interaction.create_response(id, token, %{
+        type: 4,
+        data: %{
+          content: """
+          ❌ You either do not have permissions to restart servers or are
+          trying to do so in an ineligible channel
+          """,
+          # 64 = ephemeral
+          flags: Bitwise.bsl(1, 6)
+        }
+      })
     end
   end
 
   def handle_event(_), do: :noop
 
   # --- helpers below ---
+
+  # Check if a member has a specific role (by role ID)
+  def has_role?(guild_id, user_id, allowed_role_ids) do
+    case Api.Guild.member(guild_id, user_id) do
+      {:ok, %Member{roles: roles}} ->
+        Enum.any?(roles, fn role -> role in allowed_role_ids end)
+
+      _error ->
+        false
+    end
+  end
 
   defp parse_response({:ok, %HTTPoison.Response{status_code: 200, body: body}}),
     do: Jason.decode!(body)

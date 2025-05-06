@@ -14,4 +14,11 @@ config :hgs_discord_bot,
     1_135_711_821_928_603_708,
     # sassy-chats
     1_284_355_187_653_214_310
+  ],
+  allowed_roles: [
+    # Game Servers
+    1_369_029_594_245_632_144,
+
+    # # Highgate Studios
+    219_906_462_531_584_000
   ]
