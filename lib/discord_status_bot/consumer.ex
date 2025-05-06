@@ -59,7 +59,7 @@ defmodule HGSDiscordBot.Consumer do
 
       Api.Interaction.create_response(id, token, %{
         type: 4,
-        data: %{content: "Attempting to restart #{game_id}"}
+        data: %{content: "Attempting to restart #{Utilities.get(game_id)}"}
       })
 
       # send POST

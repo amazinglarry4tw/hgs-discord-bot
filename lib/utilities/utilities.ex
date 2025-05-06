@@ -9,7 +9,20 @@ defmodule Utilities.Utilities do
   def load do
     case File.read(@friendly_names_path) do
       {:ok, content} ->
-        friendly_names = Jason.decode!(content)
+        json_data = Jason.decode!(content)
+
+        # Transform keyGroups into a flat lookup map
+        friendly_names =
+          Enum.reduce(json_data["keyGroups"], %{}, fn group, acc ->
+            value = group["value"]
+            keys = group["keys"]
+
+            # For each key in the group, create a mapping to the same value
+            Enum.reduce(keys, acc, fn key, inner_acc ->
+              Map.put(inner_acc, key, value)
+            end)
+          end)
+
         Application.put_env(:hgs_discord_bot, :friendly_names, friendly_names)
         friendly_names
 

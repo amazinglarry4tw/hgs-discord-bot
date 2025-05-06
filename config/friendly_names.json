@@ -1,6 +1,20 @@
 {
-    "VRisingServer": "V Rising",
-    "MoriaServer-Win64-Shipping": "Return to Moria",
-    "CoreKeeperServer": "Core Keeper",
-    "enshrouded_server": "Enshrouded"
-}
+    "keyGroups": [
+      {
+        "keys": ["VRisingServer", "vrising"],
+        "value": "V Rising"
+      },
+      {
+        "keys": ["MoriaServer-Win64-Shipping", "returntomoria"],
+        "value": "Return to Moria"
+      },
+      {
+        "keys": ["CoreKeeperServer", "corekeeper"],
+        "value": "Core Keeper"
+      },
+      {
+        "keys": ["enshrouded_server", "enshrouded"],
+        "value": "Enshrouded"
+      }
+    ]
+  }
