@@ -16,103 +16,121 @@ defmodule HGSDiscordBot.Consumer do
         {:INTERACTION_CREATE,
          %Interaction{type: 2, data: %{name: "status"}, channel_id: chan, id: id, token: token},
          _ws}
-      ) do
-    if chan in @allowed_channels do
-      response_text =
-        @endpoint
-        |> HTTPoison.get()
-        |> parse_response()
-        |> format_servers()
-        # ensures it’s a string even if something slips through
-        |> to_string()
+      )
+      when chan in @allowed_channels do
+    response_text =
+      @endpoint
+      |> HTTPoison.get()
+      |> parse_response()
+      |> format_servers()
 
-      IO.inspect(response_text, label: "🔍 response_text")
-
-      Api.Interaction.create_response(id, token, %{
-        type: 4,
-        data: %{content: response_text}
-      })
-    else
-      # send an ephemeral “you can’t do that here” message
-      Api.Interaction.create_response(id, token, %{
-        type: 4,
-        data: %{
-          content: "❌ You can only run `/status` in designated channels.",
-          # 64 = ephemeral
-          flags: Bitwise.bsl(1, 6)
-        }
-      })
-    end
+    Api.Interaction.create_response(id, token, %{
+      type: 4,
+      data: %{content: response_text}
+    })
   end
 
   def handle_event(
         {:INTERACTION_CREATE,
+         %Interaction{type: 2, data: %{name: "status"}, id: id, token: token}, _ws}
+      ) do
+    Api.Interaction.create_response(id, token, %{
+      type: 4,
+      data: %{content: "You cannot use `/status` in this channel.", flags: Bitwise.bsl(1, 6)}
+    })
+  end
+
+  @impl true
+  def handle_event(
+        {:INTERACTION_CREATE,
          %Interaction{
            type: 2,
-           data: %{name: "restart", options: [%{name: "game_id", value: game_id}]},
-           channel_id: chan,
-           id: id,
-           guild_id: guild_id,
-           user: user,
-           token: token
-         }, _ws}
+           data: %{name: "restart", options: [%{name: "game_id", value: game_id}]}
+         } = interaction, _ws}
       ) do
-    if chan in @allowed_channels and has_role?(guild_id, user.id, @allowed_role_ids) do
-      # body = %{game: game_id} |> Jason.encode!()
-      # headers = [{"Content-Type", "application/json"}]
-      endpoint = "#{@restart_endpoint_url}#{game_id}"
+    # Delegate to a specialized handler based on channel and roles
 
-      Api.Interaction.create_response(id, token, %{
-        type: 4,
-        data: %{content: "♻ Attempting to restart **#{Utilities.get(game_id)}** ♻"}
-      })
+    role? =
+      has_role?(fetch_member_roles(interaction.guild_id, interaction.user.id), @allowed_role_ids)
 
-      # send POST
-      result =
-        case HTTPoison.post(
-               endpoint,
-               "",
-               [
-                 {"Content-Type", "application/json"},
-                 {"Accept", "application/json"}
-               ],
-               recv_timeout: 60_000
-             ) do
-          {:ok, %HTTPoison.Response{status_code: 200}} ->
-            "🚀 **#{Utilities.get(game_id)}** restarted successfully. 🚀"
+    channel? = interaction.channel_id in @allowed_channels
 
-          {:ok, %HTTPoison.Response{status_code: _}} ->
-            "⚠️ Failed to restart.  Did you use the correct `game_id`?"
-
-          {:error, %HTTPoison.Error{reason: reason}} ->
-            "❌ HTTP error: #{inspect(reason)}"
-        end
-
-      case Api.Message.create(chan, %{content: result}) do
-        {:ok, _message} ->
-          IO.puts("Successfully sent message to channel")
-
-        {:error, error} ->
-          IO.inspect(error, label: "Failed to send message")
-      end
-    else
-      Api.Interaction.create_response(id, token, %{
-        type: 4,
-        data: %{
-          content: """
-          ❌ You either do not have permissions to restart servers or are
-          trying to do so in an ineligible channel
-          """,
-          # 64 = ephemeral
-          flags: Bitwise.bsl(1, 6)
-        }
-      })
-    end
+    handle_restart(
+      interaction,
+      game_id,
+      role?,
+      channel?
+    )
   end
 
   def handle_event(_), do: :noop
 
+  defp handle_restart(interaction, game_id, _permission = true, _channel = true) do
+    endpoint = "#{@restart_endpoint_url}#{game_id}"
+
+    Api.Interaction.create_response(interaction.id, interaction.token, %{
+      type: 4,
+      data: %{content: "♻ Attempting to restart **#{Utilities.get(game_id)}** ♻"}
+    })
+
+    result =
+      case HTTPoison.post(
+             endpoint,
+             "",
+             [
+               {"Content-Type", "application/json"},
+               {"Accept", "application/json"}
+             ],
+             recv_timeout: 60_000
+           ) do
+        {:ok, %HTTPoison.Response{status_code: 200}} ->
+          "🚀 **#{Utilities.get(game_id)}** restarted successfully. 🚀"
+
+        {:ok, %HTTPoison.Response{status_code: _}} ->
+          "⚠️ Failed to restart.  Did you use the correct `game_id`?"
+
+        {:error, %HTTPoison.Error{reason: reason}} ->
+          "❌ HTTP error: #{inspect(reason)}"
+      end
+
+    Api.Message.create(interaction.channel_id, %{content: result})
+  end
+
+  # Invalid permissions.
+  defp handle_restart(interaction, _game_id, _permission = false, _channel) do
+    Api.Interaction.create_response(interaction.id, interaction.token, %{
+      type: 4,
+      data: %{
+        content: """
+        ⛔⛔⛔ **ALERT** ⛔⛔⛔
+        You do not have permission to restart game servers! You have been reported to the authorities for haxxing. Get a good lawyer, because you're headed to El Salvador.
+        """,
+        flags: Bitwise.bsl(1, 6)
+      }
+    })
+  end
+
+  # Invalid channel.
+  defp handle_restart(interaction, _game_id, _permission = true, _channel = false) do
+    Api.Interaction.create_response(interaction.id, interaction.token, %{
+      type: 4,
+      data: %{
+        content: """
+        This command is reserved for the 💾**game-night** channel.
+        """,
+        flags: Bitwise.bsl(1, 6)
+      }
+    })
+  end
+
   # --- helpers below ---
+
+  defp fetch_member_roles(guild_id, user_id) do
+    case Api.Guild.member(guild_id, user_id) do
+      {:ok, %Member{roles: roles}} -> {:ok, roles}
+      _error -> {:error, []}
+    end
+  end
 
   # Check if a member has a specific role (by role ID)
   def has_role?(guild_id, user_id, allowed_role_ids) do
@@ -123,6 +141,10 @@ defmodule HGSDiscordBot.Consumer do
       _error ->
         false
     end
+  end
+
+  def has_role?({:ok, user_roles}, allowed_role_ids) do
+    Enum.any?(user_roles, fn role -> role in allowed_role_ids end)
   end
 
   defp parse_response({:ok, %HTTPoison.Response{status_code: 200, body: body}}),
