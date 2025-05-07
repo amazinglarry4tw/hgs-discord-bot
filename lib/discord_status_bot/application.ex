@@ -18,7 +18,7 @@ defmodule HGSDiscordBot.Application do
       options: [
         %{
           name: "game_id",
-          description: "The ID of the game server to restart",
+          description: "The id of the game server to restart",
           type: 3,
           required: true
         }
