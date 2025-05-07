@@ -45,53 +45,32 @@ defmodule HGSDiscordBot.Consumer do
         {:INTERACTION_CREATE,
          %Interaction{
            type: 2,
-           data: %{name: "restart"}
+           data: %{name: "restart", options: [%{name: "game_id", value: game_id}]}
          } = interaction, _ws}
       ) do
     # Delegate to a specialized handler based on channel and roles
+
+    role? =
+      has_role?(fetch_member_roles(interaction.guild_id, interaction.user.id), @allowed_role_ids)
+
+    channel? = interaction.channel_id in @allowed_channels
+
     handle_restart(
       interaction,
-      has_role?(fetch_member_roles(interaction.guild_id, interaction.user.id), @allowed_role_ids)
+      game_id,
+      role?,
+      channel?
     )
   end
 
-  #   Api.Interaction.create_response(id, token, %{
-  #     type: 4,
-  #     data: %{content: "♻ Attempting to restart **#{Utilities.get(game_id)}** ♻"}
-  #   })
-
-  #   # send POST
-  #   result =
-  #     case HTTPoison.post(
-  #            endpoint,
-  #            "",
-  #            [
-  #              {"Content-Type", "application/json"},
-  #              {"Accept", "application/json"}
-  #            ],
-  #            recv_timeout: 60_000
-  #          ) do
-  #       {:ok, %HTTPoison.Response{status_code: 200}} ->
-  #         "🚀 **#{Utilities.get(game_id)}** restarted successfully. 🚀"
-
-  #       {:ok, %HTTPoison.Response{status_code: _}} ->
-  #         "⚠️ Failed to restart.  Did you use the correct `game_id`?"
-
-  #       {:error, %HTTPoison.Error{reason: reason}} ->
-  #         "❌ HTTP error: #{inspect(reason)}"
-  #     end
-
-  #   Api.Message.create(chan, %{content: result})
-  # end
-
   def handle_event(_), do: :noop
 
-  defp handle_restart(interaction, true) do
-    endpoint = "#{@restart_endpoint_url}#{interaction.game_id}"
+  defp handle_restart(interaction, game_id, _permission = true, _channel = true) do
+    endpoint = "#{@restart_endpoint_url}#{game_id}"
 
     Api.Interaction.create_response(interaction.id, interaction.token, %{
       type: 4,
-      data: %{content: "♻ Attempting to restart **#{Utilities.get(interaction.game_id)}** ♻"}
+      data: %{content: "♻ Attempting to restart **#{Utilities.get(game_id)}** ♻"}
     })
 
     result =
@@ -105,7 +84,7 @@ defmodule HGSDiscordBot.Consumer do
              recv_timeout: 60_000
            ) do
         {:ok, %HTTPoison.Response{status_code: 200}} ->
-          "🚀 **#{Utilities.get(interaction.game_id)}** restarted successfully. 🚀"
+          "🚀 **#{Utilities.get(game_id)}** restarted successfully. 🚀"
 
         {:ok, %HTTPoison.Response{status_code: _}} ->
           "⚠️ Failed to restart.  Did you use the correct `game_id`?"
@@ -114,7 +93,34 @@ defmodule HGSDiscordBot.Consumer do
           "❌ HTTP error: #{inspect(reason)}"
       end
 
-    Api.Message.create(interaction.channel, %{content: result})
+    Api.Message.create(interaction.channel_id, %{content: result})
+  end
+
+  # Invalid permissions.
+  defp handle_restart(interaction, _game_id, _permission = false, _channel) do
+    Api.Interaction.create_response(interaction.id, interaction.token, %{
+      type: 4,
+      data: %{
+        content: """
+        ⛔⛔⛔ **ALERT** ⛔⛔⛔
+        You do not have permission to restart game servers! You have been reported to the authorities for haxxing. Get a good lawyer, because you're headed to El Salvador.
+        """,
+        flags: Bitwise.bsl(1, 6)
+      }
+    })
+  end
+
+  # Invalid channel.
+  defp handle_restart(interaction, _game_id, _permission = true, _channel = false) do
+    Api.Interaction.create_response(interaction.id, interaction.token, %{
+      type: 4,
+      data: %{
+        content: """
+        This command is reserved for the 💾**game-night** channel.
+        """,
+        flags: Bitwise.bsl(1, 6)
+      }
+    })
   end
 
   # --- helpers below ---
@@ -137,7 +143,7 @@ defmodule HGSDiscordBot.Consumer do
     end
   end
 
-  def has_role?(user_roles, allowed_role_ids) do
+  def has_role?({:ok, user_roles}, allowed_role_ids) do
     Enum.any?(user_roles, fn role -> role in allowed_role_ids end)
   end
 
