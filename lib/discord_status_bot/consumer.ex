@@ -64,26 +64,37 @@ defmodule HGSDiscordBot.Consumer do
 
       Api.Interaction.create_response(id, token, %{
         type: 4,
-        data: %{content: "Attempting to restart #{Utilities.get(game_id)}"}
+        data: %{content: "♻ Attempting to restart **#{Utilities.get(game_id)}** ♻"}
       })
 
       # send POST
       result =
-        case HTTPoison.post(endpoint, "", []) do
+        case HTTPoison.post(
+               endpoint,
+               "",
+               [
+                 {"Content-Type", "application/json"},
+                 {"Accept", "application/json"}
+               ],
+               recv_timeout: 60_000
+             ) do
           {:ok, %HTTPoison.Response{status_code: 200}} ->
-            "⚙️ Successfully queued restart for `#{game_id}`."
+            "🚀 **#{Utilities.get(game_id)}** restarted successfully. 🚀"
 
-          {:ok, %HTTPoison.Response{status_code: code, body: resp_body}} ->
-            "⚠️ Got #{code} from API: #{resp_body}"
+          {:ok, %HTTPoison.Response{status_code: _}} ->
+            "⚠️ Failed to restart.  Did you use the correct `game_id`?"
 
           {:error, %HTTPoison.Error{reason: reason}} ->
             "❌ HTTP error: #{inspect(reason)}"
         end
 
-      Api.Interaction.create_response(id, token, %{
-        type: 4,
-        data: %{content: result}
-      })
+      case Api.Message.create(chan, %{content: result}) do
+        {:ok, _message} ->
+          IO.puts("Successfully sent message to channel")
+
+        {:error, error} ->
+          IO.inspect(error, label: "Failed to send message")
+      end
     else
       Api.Interaction.create_response(id, token, %{
         type: 4,
